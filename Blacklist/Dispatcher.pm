@@ -1,3 +1,4 @@
+
 #!/usr/bin/perl
 package Blacklist::Dispatcher;
 use strict;
@@ -16,13 +17,35 @@ my $post_actions = {
                     my ($r, $params) = @_;
                     render_json($r, $params, \&destroy);
                     },
+    'clear'	  => sub {
+		    my ($r, $params) = @_;
+			if (defined clear($params)) {
+			    return Apache2::Const::OK;
+			}
+		        return Apache2::Const::HTTP_NOT_FOUND;
+		    },
     _DEFAULT_ => sub { return Apache2::Const::HTTP_NOT_FOUND },
+};
+
+my $get_actions = {
+    '_DEFAULT_' => sub {
+                    my ($r, $params) = @_;
+                    render_json($r, $params, \&show);
+                    },
+    'clear'     => sub {
+                    my ($r, $params) = @_;
+                    if (defined clear($params)) {
+                        return Apache2::Const::OK;
+                    }       
+                    return Apache2::Const::HTTP_NOT_FOUND;
+                    },
 };
 
 my $actions = {
     GET         => sub {
                     my ($r, $params) = @_;
-                    render_json($r, $params, \&show);
+                    my $action = $get_actions->{$params->{'action'}} || $get_actions->{_DEFAULT_};
+                    $action->($r,$params);
                     },
     POST        => sub { 
                     my ($r, $params) = @_;

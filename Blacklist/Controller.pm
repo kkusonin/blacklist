@@ -4,7 +4,7 @@ use Carp;
 use Vicidial::InboundDid;
 use Vicidial::FilterPhoneGroup;
 use base (Exporter);
-our @EXPORT = qw(show create destroy);
+our @EXPORT = qw(show clear create destroy);
 
 sub remove_int_prefix {
 	my $numbers = shift;
@@ -14,15 +14,10 @@ sub remove_int_prefix {
 
 sub add_int_prefix {
 	my $numbers = shift;
-	
-	return (map { $_ =~ s!^(\d{11,})!\+$1!; $_ } @$numbers);
+	my @r = map { $_ =~ s!^(\d{11,})!\+$1!; $_; } @$numbers;
+	return \@r;
 }
 
-sub add_int_prefix {
-	my $numbers = shift;
-	
-	return map { $_ =~ s!^\+!!; $_; } @$numbers;
-}
 
 sub create {
     my $params = shift;
@@ -39,10 +34,8 @@ sub create {
     foreach my $number (remove_int_prefix($params->{'ids'})) {
         eval {
             my $added = $filter_group->add_number($number);
-            if (!$added) {            
+            if (!$added) { 
                 push @errors, $number;
-            } else {
-                push @errors, "| $number |";
             }
         };
         if ($@) {
@@ -50,7 +43,7 @@ sub create {
         }
     }
 
-    return \@errors;
+    return add_int_prefix(\@errors);
 
 }
 
@@ -61,11 +54,12 @@ sub destroy {
     my $did_pattern = $params->{'entrance'};
     my $did = Vicidial::InboundDid->find_by_did_pattern($did_pattern);
     my $filter_group = $did->get_filter_group;
+
     if (!defined $filter_group) {
         return $params->{'ids'};
     }
     
-   foreach my $number (remove_int_prefix($params->{'ids'}}) {
+   foreach my $number (remove_int_prefix($params->{'ids'})) {
         eval {
             my $deleted = $filter_group->del_number($number);
 	    if (!$deleted) {
