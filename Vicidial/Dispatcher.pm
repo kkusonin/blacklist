@@ -19,6 +19,7 @@ my $dispatch_table = {
         '/agent/dial'   => \&agent_dial,
         '/agent/hangup' => \&agent_hangup,
         '/agent/dispo'  => \&agent_dispo,
+	'/agent/transfer' => \&agent_transfer,
 };
 
 sub handler {
@@ -160,5 +161,20 @@ sub agent_dispo {
         return "SUCCESS: disposition code set";
 }
 
+sub agent_transfer {
+        my $r = shift;
+        my %args = map { split('=', $_)} split(/&/, $r->args);
+        my $agent;
+
+        $agent = Vicidial::Agent->load({
+            username     => $args{username},
+			password     => $args{password} 
+            });
+        $agent->transfer({
+            phone_number    => $args{phone_number},
+            });
+        
+        return "SUCCESS: Call started";
+}
 
 1;

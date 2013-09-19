@@ -848,7 +848,7 @@ sub dispo {
 
     ### Update vicidial live agent record
     $self->update({
-        status              => 'PAUSED',
+        status              => 'READY',
         last_state_change   => now_time(time),
         lead_id             => 0,
         uniqueid            => '',
@@ -1069,6 +1069,99 @@ sub disposition {
                 campaign_calldate   => $NOW_TIME,
                 });
         }    
+}
+
+sub transfer {
+    my ($self, $args) = @_;
+    
+    if (!defined $args->{phone_number}) {
+        croak "Mandatory parameter is missing";
+    }
+    
+    #### Set time variables 
+    my $StarTtimE   = time;
+    my $CIDdate     = mcid_date($StarTtimE);
+    my $NOW_TIME    = now_time($StarTtimE);
+    my $tsNOW_TIME  = tsnow_time($StarTtimE);
+    #### End of time variables setting
+    
+    my $user_abb = substr ( "$self->{user}" x 4, -4);
+    my $queryCID = "XBvdcW" + $StarTtimE + $user_abb;
+    
+    my ($protocol, $extension) = split '/', $self->{extension};
+
+    my $phone = Vicidial::Phone->load({
+        extension   => $extension,
+        server_ip   => $self->{server_ip},
+        columns     => [ qw(ext_context) ],
+    });
+
+    # write some log data
+    if ($self->{comments} ne 'MANUAL' and $self->{comments} ne 'AUTO') {
+        ### Incoming call
+        my $log = Vicidial::CloserLog->load({
+            uniqueid    => $self->{uniqueid},
+            columns     => [qw(start_epoch)],
+            });
+        ##### update the duration and end time in the vicidial_closer_log table
+        $log->update({
+            end_epoch       => $StarTtimE,
+            length_in_sec   => ($StarTtimE - $log->{start_epoch}),
+            status          => 'XFER',
+            });
+    }
+    
+    my $log = Vicidial::Log->load({
+            uniqueid    => $self->{uniqueid},
+            columns     => [qw(start_epoch)],
+            });
+    ##### update the duration and end time in the vicidial_log table
+    $log->update({
+        end_epoch       => $StarTtimE,
+        length_in_sec   => ($StarTtimE - $log->{start_epoch}),
+        status          => 'XFER',
+        });
+
+    my $ucl = Vicidial::UserCallLog->add({
+        user                => $self->{user},
+        call_date           => $NOW_TIME,
+        call_type           => 'BLIND_XFER',
+        server_ip           => $self->{server_ip},
+        phone_number        => $args->{phone_number},
+        number_dialed       => $self->{channel},
+        lead_id             => $self->{lead_id},
+        campaign_id         => $self->{campaign_id}
+        });
+    
+    # Delete call record from vicidial_auto_calls
+    my $call = Vicidial::AutoCall->new({
+        uniqueid        => $self->{uniqueid},
+        });
+    $call->delete;
+    
+    ### insert the call action into the vicidial_manager table to initiate the call
+    my $dial_action = Vicidial::Manager->command({
+        uniqueid            => '',
+        entry_date          => $NOW_TIME,
+        status              => 'NEW',
+        response            => 'N',
+        server_ip           => $self->{server_ip},
+        channel             => '',
+        action              => 'Redirect',
+        callerid            => $queryCID,
+        cmd_line_b          => 'Channel: ' . $self->{channel},
+        cmd_line_c          => 'Context: ' . $phone->{ext_context},
+        cmd_line_d          => 'Exten: ' . $args->{phone_number},
+        cmd_line_e          => 'Priority: 1',
+        cmd_line_f          => 'Callerid: ' . $queryCID,
+        cmd_line_g          => '',
+        cmd_line_h          => '',
+        cmd_line_i          => '',
+        cmd_line_j          => '',
+        cmd_line_k          => '',
+        });
+
+    $self->dispo({dispo_code => 'XFER'});
 }
 
 1;
